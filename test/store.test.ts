@@ -697,7 +697,7 @@ describe("Document Chunking", () => {
 describe.skipIf(!!process.env.CI)("Token-based Chunking", () => {
   test("chunkDocumentByTokens returns single chunk for small documents", async () => {
     const content = "This is a small document.";
-    const chunks = await chunkDocumentByTokens(content, 900, 135);
+    const chunks = await chunkDocumentByTokens(content, llmModule.getDefaultLlamaCpp(), 900, 135);
     expect(chunks).toHaveLength(1);
     expect(chunks[0]!.text).toBe(content);
     expect(chunks[0]!.pos).toBe(0);
@@ -708,7 +708,7 @@ describe.skipIf(!!process.env.CI)("Token-based Chunking", () => {
   test("chunkDocumentByTokens splits large documents", async () => {
     // Create a document that's definitely more than 900 tokens
     const content = "The quick brown fox jumps over the lazy dog. ".repeat(250);
-    const chunks = await chunkDocumentByTokens(content, 900, 135);
+    const chunks = await chunkDocumentByTokens(content, llmModule.getDefaultLlamaCpp(), 900, 135);
 
     expect(chunks.length).toBeGreaterThan(1);
 
@@ -729,7 +729,7 @@ describe.skipIf(!!process.env.CI)("Token-based Chunking", () => {
 
   test("chunkDocumentByTokens creates overlapping chunks", async () => {
     const content = "Word ".repeat(500);  // ~500 tokens
-    const chunks = await chunkDocumentByTokens(content, 200, 30);  // 15% overlap
+    const chunks = await chunkDocumentByTokens(content, llmModule.getDefaultLlamaCpp(), 200, 30);  // 15% overlap
 
     expect(chunks.length).toBeGreaterThan(1);
 
@@ -744,7 +744,7 @@ describe.skipIf(!!process.env.CI)("Token-based Chunking", () => {
 
   test("chunkDocumentByTokens returns actual token counts", async () => {
     const content = "Hello world, this is a test.";
-    const chunks = await chunkDocumentByTokens(content);
+    const chunks = await chunkDocumentByTokens(content, llmModule.getDefaultLlamaCpp());
 
     expect(chunks).toHaveLength(1);
     // The token count should be reasonable (not 0, not equal to char count)
@@ -3931,6 +3931,17 @@ describe("Index Status", () => {
     await cleanupTestDb(store);
   });
 
+  test("two remote endpoints sharing the same #model-id resolve to the same identity and fingerprint", () => {
+    // This is the core vector-compatibility guarantee for fallback groups:
+    // a chunk embedded via host A must be found when searching via host B.
+    const identityA = llmModule.resolveEmbedIdentity("http://host-a:1234/v1#kure-v1");
+    const identityB = llmModule.resolveEmbedIdentity("http://host-b:5678/v1#kure-v1");
+
+    expect(identityA).toBe("kure-v1");
+    expect(identityA).toBe(identityB);
+    expect(getEmbeddingFingerprint(identityA)).toBe(getEmbeddingFingerprint(identityB));
+  });
+
   test("getIndexHealth returns health info", async () => {
     const store = await createTestStore();
     const collectionName = await createTestCollection();
@@ -6678,6 +6689,7 @@ describe("Embedding batching", () => {
 describe("Token chunking guardrails", () => {
   test("chunkDocumentByTokens keeps pathological single-line blobs under the token limit", async () => {
     setDefaultLlamaCpp({
+      isRemoteEmbed() { return false; },
       async tokenize(text: string) {
         return Array.from({ length: text.length }, () => 1);
       },
@@ -6687,7 +6699,7 @@ describe("Token chunking guardrails", () => {
     } as any);
 
     try {
-      const chunks = await chunkDocumentByTokens("x".repeat(1200), 100, 15, 20);
+      const chunks = await chunkDocumentByTokens("x".repeat(1200), llmModule.getDefaultLlamaCpp(), 100, 15, 20);
 
       expect(chunks.length).toBeGreaterThan(1);
       expect(chunks.every((chunk) => chunk.tokens <= 100)).toBe(true);
