@@ -890,7 +890,6 @@ export class LlamaCpp implements LLM {
 
   private embedModelUri: string;
   private embedEndpoints: string[];
-  private localEmbedFallbackUri: string | undefined;
   private remoteEmbedder: RemoteEmbedder | null = null;
   private generateModelUri: string;
   private rerankModelUri: string;
@@ -927,9 +926,6 @@ export class LlamaCpp implements LLM {
 
     this.embedEndpoints = resolveEmbedEndpoints(config.embedModel);
     this.embedModelUri = resolveEmbedIdentity(config.embedModel);
-    this.localEmbedFallbackUri = this.embedEndpoints.some(isRemoteEmbedModel)
-      ? this.embedEndpoints.find((uri) => !isRemoteEmbedModel(uri))
-      : undefined;
     this.generateModelUri = resolveGenerateModel({ generate: config.generateModel });
     this.rerankModelUri = resolveRerankModel({ rerank: config.rerankModel });
     this.modelCacheDir = config.modelCacheDir || MODEL_CACHE_DIR;
@@ -957,10 +953,6 @@ export class LlamaCpp implements LLM {
       });
     }
     return this.remoteEmbedder;
-  }
-
-  private localEmbedModelUri(): string {
-    return this.localEmbedFallbackUri ?? this.embedModelUri;
   }
 
   get generateModelName(): string {
@@ -1223,7 +1215,7 @@ export class LlamaCpp implements LLM {
 
     this.embedModelLoadPromise = (async () => {
       const llama = await this.ensureLlama();
-      const modelPath = await this.resolveModel(this.localEmbedModelUri());
+      const modelPath = await this.resolveModel(this.embedModelUri);
       const model = await llama.loadModel(this.modelLoadOptions(modelPath));
       this.embedModel = model;
       this.embedModelPath = modelPath;
@@ -1554,11 +1546,8 @@ export class LlamaCpp implements LLM {
         const embedding = await this.ensureRemoteEmbedder().embed(text);
         return { embedding, model: options.model ?? this.embedModelUri };
       } catch (error) {
-        if (!this.localEmbedFallbackUri) {
-          console.error("Embedding error:", error);
-          return null;
-        }
-        console.warn(`Remote embedding failed; falling back to local model ${this.localEmbedFallbackUri}`);
+        console.error("Embedding error:", error);
+        return null;
       }
     }
 
@@ -1597,11 +1586,8 @@ export class LlamaCpp implements LLM {
         const vectors = await this.ensureRemoteEmbedder().embedBatch(texts);
         return vectors.map((embedding) => ({ embedding, model: options.model ?? this.embedModelUri }));
       } catch (error) {
-        if (!this.localEmbedFallbackUri) {
-          console.error("Batch embedding error:", error);
-          return texts.map(() => null);
-        }
-        console.warn(`Remote batch embedding failed; falling back to local model ${this.localEmbedFallbackUri}`);
+        console.error("Batch embedding error:", error);
+        return texts.map(() => null);
       }
     }
 
