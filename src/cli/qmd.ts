@@ -2362,12 +2362,17 @@ function ensureModelsConfiguredForCli(): { embed: string; generate: string; rera
     // with the collapsed identity.
     const needsEmbedWrite = current.embed === undefined;
     const needsOtherWrite = current.generate !== generate || current.rerank !== rerank;
+    // What fills it in is the raw setting (QMD_EMBED_MODEL's endpoint or endpoint list, else the
+    // default model), never the collapsed identity: a remote model's identity is its bare
+    // `#model-id`, which would later win over QMD_EMBED_MODEL and be loaded as a local file.
+    const rawEmbedEndpoints = resolveEmbedEndpoints(undefined, process.env.QMD_EMBED_MODEL);
+    const embedToWrite = rawEmbedEndpoints.length === 1 ? rawEmbedEndpoints[0]! : rawEmbedEndpoints;
     if (needsEmbedWrite || needsOtherWrite) {
       saveConfig({
         ...config,
         models: {
           ...current,
-          ...(needsEmbedWrite ? { embed: embedIdentity } : {}),
+          ...(needsEmbedWrite ? { embed: embedToWrite } : {}),
           generate,
           rerank,
         },

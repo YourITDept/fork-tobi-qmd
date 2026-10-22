@@ -4,6 +4,10 @@
 
 ### Fixed
 
+- Remote embeddings: when `models.embed` is missing from `index.yml`, qmd now fills it in with
+  `QMD_EMBED_MODEL`'s endpoint URI (or endpoint list), not the remote model's bare `#model-id`.
+  The bare id then won over `QMD_EMBED_MODEL` and was loaded as a local GGUF file ("No model file
+  found"). (fork: Business Brain Wiki, cs62)
 - `qmd doctor` selects vector sample identities before loading document bodies,
   avoiding excessive SQLite memory use on large indexes with duplicate paths.
   #978 (thanks @naveenspark)

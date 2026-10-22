@@ -811,6 +811,25 @@ describe("CLI Status Command", () => {
     expect(configText).not.toMatch(/embed:\s*test-embed-model\s*\n/);
   }, 20000);
 
+  test("filling in a missing embed setting writes QMD_EMBED_MODEL's remote URI, not its bare identity", async () => {
+    // Regression guard: with no `models.embed` in index.yml and a remote QMD_EMBED_MODEL, the
+    // write-back must store the URI. Storing the identity ("test-embed-model") made it win over
+    // QMD_EMBED_MODEL afterwards and be loaded as a local GGUF file ("No model file found").
+    const env = await createIsolatedTestEnv("doctor-remote-embed-env-write-back");
+    await writeFile(join(env.configDir, "index.yml"), `collections: {}\n`);
+
+    const { exitCode } = await runQmd(["doctor"], {
+      dbPath: env.dbPath,
+      configDir: env.configDir,
+      env: { QMD_DOCTOR_DEVICE_PROBE: "0", QMD_EMBED_MODEL: "https://example.test/v1#test-embed-model" },
+    });
+    expect(exitCode).toBe(0);
+
+    const configText = readFileSync(join(env.configDir, "index.yml"), "utf-8");
+    expect(configText).toContain("https://example.test/v1#test-embed-model");
+    expect(configText).not.toMatch(/embed:\s*test-embed-model\s*\n/);
+  }, 20000);
+
   test("qmd doctor identifies cached non-GGUF model files", async () => {
     const env = await createIsolatedTestEnv("doctor-invalid-model-cache");
     const model = "hf:example/custom-model/custom.gguf";
