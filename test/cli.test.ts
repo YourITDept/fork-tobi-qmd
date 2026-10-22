@@ -830,6 +830,33 @@ describe("CLI Status Command", () => {
     expect(configText).not.toMatch(/embed:\s*test-embed-model\s*\n/);
   }, 20000);
 
+  test("with QMD_LOCAL_MODELS=off, the local generate and rerank defaults are not written, and status shows them off", async () => {
+    // Fork (Business Brain Wiki, cs62): API-only installs never load local models, so index.yml
+    // should not name them; values a user set are kept.
+    const env = await createIsolatedTestEnv("local-models-off-config");
+    await writeFile(join(env.configDir, "index.yml"), `collections: {}\n`);
+    const { stdout, exitCode } = await runQmd(["status"], {
+      dbPath: env.dbPath,
+      configDir: env.configDir,
+      env: { QMD_LOCAL_MODELS: "off", QMD_EMBED_MODEL: "https://example.test/v1#test-embed-model" },
+    });
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("Reranking:   off (QMD_LOCAL_MODELS=off)");
+    expect(stdout).toContain("Generation:  off (QMD_LOCAL_MODELS=off)");
+    const configText = readFileSync(join(env.configDir, "index.yml"), "utf-8");
+    expect(configText).toContain("https://example.test/v1#test-embed-model");
+    expect(configText).not.toMatch(/^\s*(generate|rerank):/m);
+
+    // A model the user set stays, even with local models off.
+    const custom = "hf:example/custom-gen/custom.gguf";
+    await writeFile(join(env.configDir, "index.yml"), `collections: {}\nmodels:\n  embed: https://example.test/v1#test-embed-model\n  generate: ${custom}\n`);
+    const again = await runQmd(["status"], { dbPath: env.dbPath, configDir: env.configDir, env: { QMD_LOCAL_MODELS: "off" } });
+    expect(again.exitCode).toBe(0);
+    const kept = readFileSync(join(env.configDir, "index.yml"), "utf-8");
+    expect(kept).toContain(`generate: ${custom}`);
+    expect(kept).not.toMatch(/^\s*rerank:/m);
+  }, 20000);
+
   test("qmd doctor identifies cached non-GGUF model files", async () => {
     const env = await createIsolatedTestEnv("doctor-invalid-model-cache");
     const model = "hf:example/custom-model/custom.gguf";

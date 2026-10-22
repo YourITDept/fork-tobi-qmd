@@ -107,7 +107,7 @@ import { formatMetadataKeySummaries, formatMetadataOverview } from "../metadata-
 import type { DocumentMetadata } from "../metadata.js";
 import { parseMetadataFilter, parseMetadataMatch, type MetadataFilter, type MetadataMatch } from "../metadata-filter.js";
 import { hasVectorIndex, storedEmbedding } from "../vec-layout.js";
-import { disposeDefaultLlamaCpp, getDefaultLlamaCpp, setDefaultLlamaCpp, LlamaCpp, withLLMSession, withLLMSessionForLlm, pullModels, DEFAULT_MODEL_CACHE_DIR, resolveEmbedEndpoints, resolveEmbedIdentity, resolveEmbedModel, resolveGenerateModel, resolveRerankModel, resolveModels, inspectGgufFile, isDarwinMetalMitigationActive } from "../llm.js";
+import { disposeDefaultLlamaCpp, getDefaultLlamaCpp, setDefaultLlamaCpp, LlamaCpp, withLLMSession, withLLMSessionForLlm, pullModels, DEFAULT_MODEL_CACHE_DIR, resolveEmbedEndpoints, resolveEmbedIdentity, resolveEmbedModel, localModelsDisabled, resolveGenerateModel, resolveRerankModel, resolveModels, inspectGgufFile, isDarwinMetalMitigationActive } from "../llm.js";
 import { isRemoteEmbedModel } from "../remote-embed.js";
 import {
   formatSearchResults,
@@ -694,8 +694,9 @@ async function showStatus(): Promise<void> {
     const activeModels = resolveModelsForCli();
     console.log(`\n${c.bold}Models${c.reset}`);
     console.log(`  Embedding:   ${hfLink(activeModels.embed)}`);
-    console.log(`  Reranking:   ${hfLink(activeModels.rerank)}`);
-    console.log(`  Generation:  ${hfLink(activeModels.generate)}`);
+    const localModelsOff = localModelsDisabled();
+    console.log(`  Reranking:   ${localModelsOff ? "off (QMD_LOCAL_MODELS=off)" : hfLink(activeModels.rerank)}`);
+    console.log(`  Generation:  ${localModelsOff ? "off (QMD_LOCAL_MODELS=off)" : hfLink(activeModels.generate)}`);
   }
 
 
@@ -2365,7 +2366,11 @@ function ensureModelsConfiguredForCli(): { embed: string; generate: string; rera
     // array config (including remote endpoint lists) must never be clobbered
     // with the collapsed identity.
     const needsEmbedWrite = current.embed === undefined;
-    const needsOtherWrite = current.generate !== generate || current.rerank !== rerank;
+    // With local models off (QMD_LOCAL_MODELS=off) the local generate and rerank models are never
+    // used, so their defaults are not written: the file would name models nothing loads. Values a
+    // user set are kept.
+    const localModelsOff = localModelsDisabled();
+    const needsOtherWrite = !localModelsOff && (current.generate !== generate || current.rerank !== rerank);
     // What fills it in is the raw setting (QMD_EMBED_MODEL's endpoint or endpoint list, else the
     // default model), never the collapsed identity: a remote model's identity is its bare
     // `#model-id`, which would later win over QMD_EMBED_MODEL and be loaded as a local file.
@@ -2377,8 +2382,7 @@ function ensureModelsConfiguredForCli(): { embed: string; generate: string; rera
         models: {
           ...current,
           ...(needsEmbedWrite ? { embed: embedToWrite } : {}),
-          generate,
-          rerank,
+          ...(localModelsOff ? {} : { generate, rerank }),
         },
       });
     }

@@ -4,6 +4,9 @@
 
 ### Fixed
 
+- With `QMD_LOCAL_MODELS=off`, qmd no longer writes the default local `generate` and `rerank`
+  models into `index.yml` (nothing loads them), and `qmd status` shows them as "off". Values a
+  user set are kept. (fork: Business Brain Wiki, cs62)
 - Builds from this fork are reproducible: `package-lock.json` is committed (it was ignored), so
   `npm ci` installs the same 303 package versions every time, including the Linux x64 and arm64
   native builds. (fork: Business Brain Wiki, cs62)
