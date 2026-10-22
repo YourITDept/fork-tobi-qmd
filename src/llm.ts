@@ -27,11 +27,38 @@ type NodeLlamaCppModule = {
   LlamaLogLevel: { error: unknown };
 };
 
+/**
+ * Fork (Business Brain Wiki, cs62): `QMD_LOCAL_MODELS=off` turns local models off. Nothing is
+ * downloaded from Hugging Face and node-llama-cpp (an optional dependency) is never loaded: query
+ * expansion falls back to the original query and reranking keeps the retrieval order. For
+ * API-only installs, where embeddings come from a remote endpoint.
+ */
+export function localModelsDisabled(env: string | undefined = process.env.QMD_LOCAL_MODELS): boolean {
+  return /^(0|off|false|no|none)$/i.test(env?.trim() ?? "");
+}
+
+const warnedOnce = new Set<string>();
+function warnOnce(key: string, message: string): void {
+  if (warnedOnce.has(key)) return;
+  warnedOnce.add(key);
+  process.stderr.write(`${message}\n`);
+}
+
 let nodeLlamaCppImport: Promise<NodeLlamaCppModule> | null = null;
 async function loadNodeLlamaCpp(): Promise<NodeLlamaCppModule> {
+  if (localModelsDisabled()) {
+    throw new Error("Local models are turned off (QMD_LOCAL_MODELS=off): set a remote embed model (models.embed or QMD_EMBED_MODEL = https://host/v1#model-id), or unset QMD_LOCAL_MODELS.");
+  }
   nodeLlamaCppImport ??= withNativeStdoutRedirectedToStderr(
     () => import("node-llama-cpp") as Promise<NodeLlamaCppModule>
-  );
+  ).catch((error: unknown) => {
+    nodeLlamaCppImport = null;
+    const code = (error as { code?: string } | null)?.code;
+    if (code === "ERR_MODULE_NOT_FOUND" || code === "MODULE_NOT_FOUND") {
+      throw new Error("node-llama-cpp is not installed (it is optional): install it for local models, or use a remote embed model with QMD_LOCAL_MODELS=off.");
+    }
+    throw error;
+  });
   return nodeLlamaCppImport;
 }
 
@@ -1719,12 +1746,28 @@ export class LlamaCpp implements LLM {
   // ==========================================================================
 
   async expandQuery(query: string, options: { context?: string, includeLexical?: boolean } = {}): Promise<Queryable[]> {
+    // Fork (cs62): with local models off, no expansion: the original query, as the failure path below.
+    if (localModelsDisabled()) {
+      const original: Queryable[] = [{ type: 'vec', text: query }];
+      if (options.includeLexical ?? true) original.unshift({ type: 'lex', text: query });
+      return original;
+    }
     if (this._ciMode) throw new Error("LLM operations are disabled in CI (set CI=true)");
     // Ping activity at start to keep models alive during this operation
     this.touchActivity();
 
-    const llama = await this.ensureLlama();
-    await this.ensureGenerateModel();
+    // Fork (cs62): a model that cannot load (node-llama-cpp not installed, no model file) falls back
+    // to the original query like the failures inside the try below, instead of failing the search.
+    let llama: Llama;
+    try {
+      llama = await this.ensureLlama();
+      await this.ensureGenerateModel();
+    } catch (error) {
+      warnOnce("expand", `QMD Warning: query expansion skipped (${error instanceof Error ? error.message : String(error)})`);
+      const original: Queryable[] = [{ type: 'vec', text: query }];
+      if (options.includeLexical ?? true) original.unshift({ type: 'lex', text: query });
+      return original;
+    }
 
     const includeLexical = options.includeLexical ?? true;
     const context = options.context;
@@ -1826,11 +1869,22 @@ export class LlamaCpp implements LLM {
     documents: RerankDocument[],
     options: RerankOptions = {}
   ): Promise<RerankResult> {
+    // Fork (cs62): with local models off, no reranking: the retrieval order, as when no context loads.
+    if (localModelsDisabled()) {
+      return { results: documents.map((d, index) => ({ ...d, score: 0.5, index })), model: "none (QMD_LOCAL_MODELS=off)" };
+    }
     if (this._ciMode) throw new Error("LLM operations are disabled in CI (set CI=true)");
     // Ping activity at start to keep models alive during this operation
     this.touchActivity();
 
-    const contexts = await this.ensureRerankContexts();
+    // Fork (cs62): a reranker that cannot load keeps the retrieval order instead of failing the search.
+    let contexts: Awaited<ReturnType<LlamaCpp["ensureRerankContexts"]>>;
+    try {
+      contexts = await this.ensureRerankContexts();
+    } catch (error) {
+      warnOnce("rerank", `QMD Warning: reranking skipped (${error instanceof Error ? error.message : String(error)})`);
+      return { results: documents.map((d, index) => ({ ...d, score: 0.5, index })), model: "none (reranker unavailable)" };
+    }
     if (contexts.length === 0) {
       return {
         results: documents.map((d) => ({ ...d, score: 0.5, index: 0 })),

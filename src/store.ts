@@ -3862,7 +3862,8 @@ async function chunkDocumentByTokensWithLlm(
   // Use AST-aware chunking for the first pass when filepath/strategy provided
   let charChunks = await chunkDocumentAsync(content, maxChars, overlapChars, windowChars, filepath, chunkStrategy);
 
-  if (llm.isRemoteEmbed()) {
+  // An LLM without isRemoteEmbed (older callers, test doubles) is local.
+  if (typeof llm.isRemoteEmbed === "function" && llm.isRemoteEmbed()) {
     return charChunks.map((chunk) => ({
       text: chunk.text,
       pos: chunk.pos,

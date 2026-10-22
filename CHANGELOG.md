@@ -4,6 +4,25 @@
 
 ### Fixed
 
+- Remote embeddings: when `models.embed` is missing from `index.yml`, qmd now fills it in with
+  `QMD_EMBED_MODEL`'s endpoint URI (or endpoint list), not the remote model's bare `#model-id`.
+  The bare id then won over `QMD_EMBED_MODEL` and was loaded as a local GGUF file ("No model file
+  found"). (fork: Business Brain Wiki, cs62)
+- `qmd update`'s "Run 'qmd embed' … need vectors" hint now counts against the embed model `qmd
+  embed` will use, not the default model. With any other model (remote or a custom GGUF) it said
+  every document needed vectors. (fork: Business Brain Wiki, cs62)
+- Remote embeddings (#761 on current main): chunking and `qmd doctor` treat an LLM without
+  `isRemoteEmbed` (older callers, test doubles) as local instead of throwing; #761's tests now call
+  `chunkDocumentByTokens` with current main's signature, and its remote-chunking test is restored.
+  (fork: Business Brain Wiki, cs62)
+
+### Added
+
+- `QMD_LOCAL_MODELS=off` for API-only installs: node-llama-cpp is never loaded and nothing is
+  downloaded from Hugging Face; query expansion uses the original query and reranking keeps the
+  retrieval order. `node-llama-cpp` is now an optional dependency, and a local model that cannot
+  load (not installed, no model file) falls back the same way, with one warning, instead of
+  failing the search. (fork: Business Brain Wiki, cs62)
 - `qmd doctor` selects vector sample identities before loading document bodies,
   avoiding excessive SQLite memory use on large indexes with duplicate paths.
   #978 (thanks @naveenspark)

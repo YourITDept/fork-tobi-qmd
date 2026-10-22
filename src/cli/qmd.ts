@@ -1036,7 +1036,9 @@ async function updateCollections(): Promise<void> {
   const staleVectors = cleanupOrphanedVectors(db);
 
   // Check if any documents need embedding (show once at end)
-  const needsEmbedding = getHashesNeedingEmbedding(db);
+  // Counted against the model `qmd embed` will use: DEFAULT_EMBED_MODEL called every document
+  // pending under any other model (remote or a custom GGUF).
+  const needsEmbedding = getHashesNeedingEmbedding(db, undefined, resolveModelsForRuntime().embed);
   closeDb();
 
   console.log(`${c.green}✓ All collections updated.${c.reset}`);
@@ -2256,7 +2258,9 @@ async function indexFiles(pwd?: string, globPattern: string = DEFAULT_GLOB, coll
   const copiedVectors = copyVectorsToNewCollections(db, collectionName).copied;
 
   // Check if vector index needs updating
-  const needsEmbedding = getHashesNeedingEmbedding(db);
+  // Counted against the model `qmd embed` will use: DEFAULT_EMBED_MODEL called every document
+  // pending under any other model (remote or a custom GGUF).
+  const needsEmbedding = getHashesNeedingEmbedding(db, undefined, resolveModelsForRuntime().embed);
 
   progress.clear();
   console.log(`\nIndexed: ${indexed} new, ${updated} updated, ${unchanged} unchanged, ${removed} removed`);
@@ -2362,12 +2366,17 @@ function ensureModelsConfiguredForCli(): { embed: string; generate: string; rera
     // with the collapsed identity.
     const needsEmbedWrite = current.embed === undefined;
     const needsOtherWrite = current.generate !== generate || current.rerank !== rerank;
+    // What fills it in is the raw setting (QMD_EMBED_MODEL's endpoint or endpoint list, else the
+    // default model), never the collapsed identity: a remote model's identity is its bare
+    // `#model-id`, which would later win over QMD_EMBED_MODEL and be loaded as a local file.
+    const rawEmbedEndpoints = resolveEmbedEndpoints(undefined, process.env.QMD_EMBED_MODEL);
+    const embedToWrite = rawEmbedEndpoints.length === 1 ? rawEmbedEndpoints[0]! : rawEmbedEndpoints;
     if (needsEmbedWrite || needsOtherWrite) {
       saveConfig({
         ...config,
         models: {
           ...current,
-          ...(needsEmbedWrite ? { embed: embedIdentity } : {}),
+          ...(needsEmbedWrite ? { embed: embedToWrite } : {}),
           generate,
           rerank,
         },
@@ -4498,7 +4507,8 @@ async function showDoctor(): Promise<void> {
 
   const configCheck = checkDoctorIndexConfig(nextSteps);
   const configModels = configCheck.config?.models ?? {};
-  const embedIsRemote = (storeInstance.llm ?? getDefaultLlamaCpp()).isRemoteEmbed();
+  const doctorLlm = storeInstance.llm ?? getDefaultLlamaCpp();
+  const embedIsRemote = typeof doctorLlm.isRemoteEmbed === "function" && doctorLlm.isRemoteEmbed();
   checkEnvironmentOverrides(activeModels, configModels);
   checkModelDefaults(activeModels, configModels);
   checkModelCache(activeModels, nextSteps, embedIsRemote);
