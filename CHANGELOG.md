@@ -11,6 +11,14 @@
 - `qmd update`'s "Run 'qmd embed' … need vectors" hint now counts against the embed model `qmd
   embed` will use, not the default model. With any other model (remote or a custom GGUF) it said
   every document needed vectors. (fork: Business Brain Wiki, cs62)
+
+### Added
+
+- `QMD_LOCAL_MODELS=off` for API-only installs: node-llama-cpp is never loaded and nothing is
+  downloaded from Hugging Face; query expansion uses the original query and reranking keeps the
+  retrieval order. `node-llama-cpp` is now an optional dependency, and a local model that cannot
+  load (not installed, no model file) falls back the same way, with one warning, instead of
+  failing the search. (fork: Business Brain Wiki, cs62)
 - `qmd doctor` selects vector sample identities before loading document bodies,
   avoiding excessive SQLite memory use on large indexes with duplicate paths.
   #978 (thanks @naveenspark)
