@@ -181,8 +181,12 @@ function getStore(): ReturnType<typeof createStore> {
       // Untrusted project-local custom model URIs must not be loaded; status
       // still displays the YAML values via resolveModelsForCli (#889).
       const modelsForLlm = localConfigIsFullyTrusted() ? activeModels : resolveModels();
+      // The embed model goes to LlamaCpp raw (a remote URI list, or unset so
+      // QMD_EMBED_MODEL is read), not as the collapsed identity resolveModels() returns: the
+      // identity of a remote model is its bare `#model-id`, which LlamaCpp would load as a local file.
+      const rawEmbed = localConfigIsFullyTrusted() ? config.models?.embed : undefined;
       const llm = new LlamaCpp({
-        embedModel: modelsForLlm.embed,
+        embedModel: Array.isArray(rawEmbed) ? rawEmbed.join(",") : rawEmbed,
         generateModel: modelsForLlm.generate,
         rerankModel: modelsForLlm.rerank,
       });
