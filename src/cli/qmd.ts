@@ -107,7 +107,7 @@ import { formatMetadataKeySummaries, formatMetadataOverview } from "../metadata-
 import type { DocumentMetadata } from "../metadata.js";
 import { parseMetadataFilter, parseMetadataMatch, type MetadataFilter, type MetadataMatch } from "../metadata-filter.js";
 import { hasVectorIndex, storedEmbedding } from "../vec-layout.js";
-import { disposeDefaultLlamaCpp, getDefaultLlamaCpp, setDefaultLlamaCpp, LlamaCpp, withLLMSession, withLLMSessionForLlm, pullModels, DEFAULT_MODEL_CACHE_DIR, resolveEmbedEndpoints, resolveEmbedIdentity, resolveEmbedModel, localModelsDisabled, resolveGenerateModel, resolveRerankModel, resolveModels, inspectGgufFile, isDarwinMetalMitigationActive } from "../llm.js";
+import { disposeDefaultLlamaCpp, embedFailureState, getDefaultLlamaCpp, setDefaultLlamaCpp, LlamaCpp, withLLMSession, withLLMSessionForLlm, pullModels, DEFAULT_MODEL_CACHE_DIR, resolveEmbedEndpoints, resolveEmbedIdentity, resolveEmbedModel, localModelsDisabled, resolveGenerateModel, resolveRerankModel, resolveModels, inspectGgufFile, isDarwinMetalMitigationActive } from "../llm.js";
 import { isRemoteEmbedModel } from "../remote-embed.js";
 import {
   formatSearchResults,
@@ -350,6 +350,10 @@ export async function finishSuccessfulCliCommand(options: FinishSuccessfulCliCom
 
   process.exitCode = 0;
 }
+
+// Set by a command that fails after the normal clean-up path must still run (vsearch when the
+// query could not be embedded); the main block turns it into exit code 1.
+let cliCommandFailed = false;
 
 // Ensure cursor is restored on exit
 process.on('SIGINT', () => { cursor.show(); process.exit(130); });
@@ -3173,6 +3177,7 @@ async function vectorSearch(query: string, opts: OutputOptions, _model: string =
 
   checkIndexHealth(store.db);
   if (opts.filter) warnPendingMetadata(store.db, collectionNames);
+  const embedFailuresBefore = embedFailureState().count;
 
   await withLLMSession(async () => {
     let results = await vectorSearchQuery(store, query, {
@@ -3192,6 +3197,14 @@ async function vectorSearch(query: string, opts: OutputOptions, _model: string =
     closeDb();
 
     if (results.length === 0) {
+      // No results because the query could not be embedded is a failure, not an empty answer:
+      // exit 1 with nothing on stdout, so scripts do not read it as "nothing matched".
+      const failures = embedFailureState();
+      if (failures.count > embedFailuresBefore) {
+        console.error(`vsearch failed: the query could not be embedded${failures.message ? ` (${failures.message})` : ""}.`);
+        cliCommandFailed = true;
+        return;
+      }
       printEmptySearchResults(opts.format);
       return;
     }
@@ -5357,6 +5370,7 @@ if (isMain) {
       command: cli.command,
       format: cli.opts.format,
     });
+    if (cliCommandFailed) process.exitCode = 1;
   }
 
 } // end if (main module)
