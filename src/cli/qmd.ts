@@ -4507,7 +4507,8 @@ async function showDoctor(): Promise<void> {
 
   const configCheck = checkDoctorIndexConfig(nextSteps);
   const configModels = configCheck.config?.models ?? {};
-  const embedIsRemote = (storeInstance.llm ?? getDefaultLlamaCpp()).isRemoteEmbed();
+  const doctorLlm = storeInstance.llm ?? getDefaultLlamaCpp();
+  const embedIsRemote = typeof doctorLlm.isRemoteEmbed === "function" && doctorLlm.isRemoteEmbed();
   checkEnvironmentOverrides(activeModels, configModels);
   checkModelDefaults(activeModels, configModels);
   checkModelCache(activeModels, nextSteps, embedIsRemote);

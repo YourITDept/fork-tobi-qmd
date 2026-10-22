@@ -11,6 +11,10 @@
 - `qmd update`'s "Run 'qmd embed' … need vectors" hint now counts against the embed model `qmd
   embed` will use, not the default model. With any other model (remote or a custom GGUF) it said
   every document needed vectors. (fork: Business Brain Wiki, cs62)
+- Remote embeddings (#761 on current main): chunking and `qmd doctor` treat an LLM without
+  `isRemoteEmbed` (older callers, test doubles) as local instead of throwing; #761's tests now call
+  `chunkDocumentByTokens` with current main's signature, and its remote-chunking test is restored.
+  (fork: Business Brain Wiki, cs62)
 
 ### Added
 
