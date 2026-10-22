@@ -2458,7 +2458,6 @@ export async function generateEmbeddings(
         const chunks = await chunkDocumentByTokensWithLlm(
           llm,
           doc.body,
-          llm,
           undefined, undefined, undefined,
           doc.path,
           options?.chunkStrategy,
@@ -3845,7 +3844,6 @@ function stripUnpairedSurrogates(text: string): string {
 async function chunkDocumentByTokensWithLlm(
   llm: LlamaCpp,
   content: string,
-  llm: LlamaCpp,
   maxTokens: number = CHUNK_SIZE_TOKENS,
   overlapTokens: number = CHUNK_OVERLAP_TOKENS,
   windowTokens: number = CHUNK_WINDOW_TOKENS,

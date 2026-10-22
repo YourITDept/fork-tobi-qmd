@@ -107,7 +107,7 @@ import { formatMetadataKeySummaries, formatMetadataOverview } from "../metadata-
 import type { DocumentMetadata } from "../metadata.js";
 import { parseMetadataFilter, parseMetadataMatch, type MetadataFilter, type MetadataMatch } from "../metadata-filter.js";
 import { hasVectorIndex, storedEmbedding } from "../vec-layout.js";
-import { disposeDefaultLlamaCpp, getDefaultLlamaCpp, setDefaultLlamaCpp, LlamaCpp, withLLMSession, withLLMSessionForLlm, pullModels, DEFAULT_MODEL_CACHE_DIR, resolveEmbedModel, resolveGenerateModel, resolveRerankModel, resolveModels, inspectGgufFile, isDarwinMetalMitigationActive } from "../llm.js";
+import { disposeDefaultLlamaCpp, getDefaultLlamaCpp, setDefaultLlamaCpp, LlamaCpp, withLLMSession, withLLMSessionForLlm, pullModels, DEFAULT_MODEL_CACHE_DIR, resolveEmbedEndpoints, resolveEmbedIdentity, resolveEmbedModel, resolveGenerateModel, resolveRerankModel, resolveModels, inspectGgufFile, isDarwinMetalMitigationActive } from "../llm.js";
 import { isRemoteEmbedModel } from "../remote-embed.js";
 import {
   formatSearchResults,
@@ -757,7 +757,7 @@ function collectSensitiveSnapshot(): SensitiveSnapshot {
       path: col.path,
     })),
     models: {
-      embed: config.models?.embed,
+      embed: Array.isArray(config.models?.embed) ? config.models?.embed.join(",") : config.models?.embed,
       rerank: config.models?.rerank,
       generate: config.models?.generate,
     },
@@ -4285,7 +4285,7 @@ export async function checkEmbeddingVectorSamples(db: Database, model: string, f
   const threshold = 0.0001;
   const mismatches: string[] = [];
 
-  await withLLMSessionForLlm(llm, async (session) => {
+  await withLLMSession(async (session) => {
     for (const sample of samples) {
       const hashSeq = `${sample.hash}_${sample.seq}`;
       const chunks = await chunkDocumentByTokens(sample.body, undefined, undefined, undefined, sample.path, undefined, session.signal);
@@ -4571,7 +4571,7 @@ async function showDoctor(): Promise<void> {
   }
 
   try {
-    const vectorSample = await checkEmbeddingVectorSamples(db, embedModel, fingerprint, storeInstance.llm ?? getDefaultLlamaCpp());
+    const vectorSample = await checkEmbeddingVectorSamples(db, embedModel, fingerprint);
     doctorCheck("embedding vector sample", vectorSample.ok, vectorSample.details);
     if (!vectorSample.ok) {
       nextSteps.push("Run `qmd embed --force` to rebuild existing vectors that no longer reproduce under the current embedding pipeline.");
