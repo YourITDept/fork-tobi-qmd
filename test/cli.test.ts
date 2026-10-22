@@ -1437,6 +1437,39 @@ describe("CLI Cleanup Command", () => {
 });
 
 describe("qmd update stale vector rows", () => {
+  test("update's 'need vectors' hint counts against the configured embed model, not the default", async () => {
+    // Regression guard: update counted pending documents against DEFAULT_EMBED_MODEL, so with any
+    // other embed model (remote or a custom GGUF) it said every document needed vectors, while
+    // `qmd embed` (which uses the configured model) then had nothing or almost nothing to do.
+    const env = await createIsolatedTestEnv("update-hint-configured-model");
+    const root = await mkdtemp(join(tmpdir(), "qmd-update-hint-"));
+    try {
+      await writeFile(join(root, "a.md"), "# A\n\nalpha\n");
+      await writeFile(join(root, "b.md"), "# B\n\nbeta\n");
+      const model = "hf:example/custom-embed/custom.gguf";
+      await writeFile(join(env.configDir, "index.yml"), `collections: {}\nmodels:\n  embed: ${model}\n  generate: ${DEFAULT_GENERATE_MODEL_URI}\n  rerank: ${DEFAULT_RERANK_MODEL_URI}\n`);
+      const add = await runQmd(["collection", "add", root, "--name", "hint"], { dbPath: env.dbPath, configDir: env.configDir });
+      expect(add.exitCode).toBe(0);
+
+      // Every active document already has its vectors, made with the configured model.
+      const store = createStore(env.dbPath);
+      try {
+        const rows = store.db.prepare(`SELECT DISTINCT hash FROM documents WHERE active = 1`).all() as { hash: string }[];
+        expect(rows.length).toBe(2);
+        store.ensureVecTable(3);
+        for (const { hash } of rows) store.insertEmbedding(hash, 0, 0, new Float32Array([1, 2, 3]), model, new Date().toISOString(), 1);
+      } finally {
+        store.close();
+      }
+
+      const update = await runQmd(["update"], { dbPath: env.dbPath, configDir: env.configDir });
+      expect(update.exitCode).toBe(0);
+      expect(update.stdout).not.toContain("need vectors");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   test("a document whose file disappeared loses its vector rows at the end of update", async () => {
     const env = await createIsolatedTestEnv("stale-vector-rows");
     const add = await runQmd(["collection", "add", fixturesDir, "--name", "fixtures"], { dbPath: env.dbPath, configDir: env.configDir });

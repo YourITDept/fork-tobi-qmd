@@ -1036,7 +1036,9 @@ async function updateCollections(): Promise<void> {
   const staleVectors = cleanupOrphanedVectors(db);
 
   // Check if any documents need embedding (show once at end)
-  const needsEmbedding = getHashesNeedingEmbedding(db);
+  // Counted against the model `qmd embed` will use: DEFAULT_EMBED_MODEL called every document
+  // pending under any other model (remote or a custom GGUF).
+  const needsEmbedding = getHashesNeedingEmbedding(db, undefined, resolveModelsForRuntime().embed);
   closeDb();
 
   console.log(`${c.green}✓ All collections updated.${c.reset}`);
@@ -2256,7 +2258,9 @@ async function indexFiles(pwd?: string, globPattern: string = DEFAULT_GLOB, coll
   const copiedVectors = copyVectorsToNewCollections(db, collectionName).copied;
 
   // Check if vector index needs updating
-  const needsEmbedding = getHashesNeedingEmbedding(db);
+  // Counted against the model `qmd embed` will use: DEFAULT_EMBED_MODEL called every document
+  // pending under any other model (remote or a custom GGUF).
+  const needsEmbedding = getHashesNeedingEmbedding(db, undefined, resolveModelsForRuntime().embed);
 
   progress.clear();
   console.log(`\nIndexed: ${indexed} new, ${updated} updated, ${unchanged} unchanged, ${removed} removed`);

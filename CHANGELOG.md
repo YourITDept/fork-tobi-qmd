@@ -8,6 +8,9 @@
   `QMD_EMBED_MODEL`'s endpoint URI (or endpoint list), not the remote model's bare `#model-id`.
   The bare id then won over `QMD_EMBED_MODEL` and was loaded as a local GGUF file ("No model file
   found"). (fork: Business Brain Wiki, cs62)
+- `qmd update`'s "Run 'qmd embed' … need vectors" hint now counts against the embed model `qmd
+  embed` will use, not the default model. With any other model (remote or a custom GGUF) it said
+  every document needed vectors. (fork: Business Brain Wiki, cs62)
 - `qmd doctor` selects vector sample identities before loading document bodies,
   avoiding excessive SQLite memory use on large indexes with duplicate paths.
   #978 (thanks @naveenspark)
