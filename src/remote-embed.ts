@@ -128,6 +128,7 @@ export class RemoteEmbedder {
 
     const inputs = texts.map((t) => (t.length > this.maxChars ? t.slice(0, this.maxChars) : t));
 
+    let lastError: string | null = null;
     for (let i = 0; i < this.endpoints.length; i++) {
       if (!this.isHealthy(i)) continue;
       const endpoint = this.endpoints[i]!;
@@ -145,14 +146,15 @@ export class RemoteEmbedder {
         const vectors = body.data.map((item) => item.embedding);
         return this.normalize ? vectors.map(l2Normalize) : vectors;
       } catch (error) {
+        lastError = error instanceof Error ? error.message : String(error);
         console.warn(
-          `QMD Warning: remote embed endpoint ${endpoint.apiBase} failed (${error instanceof Error ? error.message : String(error)}), marking unhealthy for ${this.healthTtlMs}ms.`
+          `QMD Warning: remote embed endpoint ${endpoint.apiBase} failed (${lastError}), marking unhealthy for ${this.healthTtlMs}ms.`
         );
         this.markUnhealthy(i);
       }
     }
 
-    throw new RemoteEmbedAllFailedError("all remote embedding endpoints failed or unhealthy");
+    throw new RemoteEmbedAllFailedError(`all remote embedding endpoints failed or unhealthy${lastError ? ` (last error: ${lastError})` : ""}`);
   }
 
   /** Convenience wrapper around embedBatch for a single text. */

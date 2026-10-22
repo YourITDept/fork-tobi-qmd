@@ -4,6 +4,11 @@
 
 ### Fixed
 
+- `qmd vsearch` exits 1, with nothing on stdout, when the query cannot be embedded (the API key
+  refused, the embedding endpoint down). It printed `[]` and exited 0, so a caller read the
+  failure as "nothing matched". A real empty answer is still `[]` with exit 0. The remote
+  embedding error now names the last endpoint's error (for example `returned HTTP 401`).
+  (fork: Business Brain Wiki, cs62)
 - With `QMD_LOCAL_MODELS=off`, qmd no longer writes the default local `generate` and `rerank`
   models into `index.yml` (nothing loads them), and `qmd status` shows them as "off". Values a
   user set are kept. (fork: Business Brain Wiki, cs62)

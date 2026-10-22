@@ -905,6 +905,21 @@ function isCpuModeRequested(): boolean {
   return resolveLlamaGpuMode() === false;
 }
 
+// Failed single-text embeddings (embed() logs and returns null), counted so a CLI search can tell
+// "nothing matched" from "the query could not be embedded" (key refused, endpoint down).
+let embedFailureCount = 0;
+let lastEmbedFailureMessage: string | null = null;
+
+function noteEmbedFailure(error: unknown): void {
+  embedFailureCount++;
+  lastEmbedFailureMessage = error instanceof Error ? error.message : String(error);
+}
+
+/** How many embed() calls have failed in this process, and the latest error message. */
+export function embedFailureState(): { count: number; message: string | null } {
+  return { count: embedFailureCount, message: lastEmbedFailureMessage };
+}
+
 export class LlamaCpp implements LLM {
   private readonly _ciMode = !!process.env.CI;
   private llama: Llama | null = null;
@@ -1574,6 +1589,7 @@ export class LlamaCpp implements LLM {
         return { embedding, model: options.model ?? this.embedModelUri };
       } catch (error) {
         console.error("Embedding error:", error);
+        noteEmbedFailure(error);
         return null;
       }
     }
@@ -1598,6 +1614,7 @@ export class LlamaCpp implements LLM {
       };
     } catch (error) {
       console.error("Embedding error:", error);
+      noteEmbedFailure(error);
       return null;
     }
   }
