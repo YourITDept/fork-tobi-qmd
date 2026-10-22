@@ -4,6 +4,9 @@
 
 ### Fixed
 
+- Builds from this fork are reproducible: `package-lock.json` is committed (it was ignored), so
+  `npm ci` installs the same 303 package versions every time, including the Linux x64 and arm64
+  native builds. (fork: Business Brain Wiki, cs62)
 - Remote embeddings: when `models.embed` is missing from `index.yml`, qmd now fills it in with
   `QMD_EMBED_MODEL`'s endpoint URI (or endpoint list), not the remote model's bare `#model-id`.
   The bare id then won over `QMD_EMBED_MODEL` and was loaded as a local GGUF file ("No model file
